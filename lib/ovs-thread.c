@@ -32,6 +32,9 @@
 #include "socket-util.h"
 #include "util.h"
 
+/* set default stack size to 1M */
+#define OVS_STACK_SIZE (1024 * 1024)
+
 #ifdef __CHECKER__
 /* Omit the definitions in this file because they are somewhat difficult to
  * write without prompting "sparse" complaints, without ugliness or
@@ -345,6 +348,7 @@ ovs_thread_create(const char *name, void *(*start)(void *), void *arg)
 {
     struct ovsthread_aux *aux;
     pthread_t thread;
+    pthread_attr_t attr;
     int error;
 
     forbid_forking("multiple threads exist");
@@ -356,10 +360,21 @@ ovs_thread_create(const char *name, void *(*start)(void *), void *arg)
     aux->arg = arg;
     ovs_strlcpy(aux->name, name, sizeof aux->name);
 
-    error = pthread_create(&thread, NULL, ovsthread_wrapper, aux);
+    error = pthread_attr_init(&attr);
+    if (error) {
+        ovs_abort(error, "pthread_attr_init failed");
+    }
+    error = pthread_attr_setstacksize(&attr, OVS_STACK_SIZE);
+    if (error) {
+        ovs_abort(error, "pthread_attr_setstacksize failed");
+    }
+
+    error = pthread_create(&thread, &attr, ovsthread_wrapper, aux);
     if (error) {
         ovs_abort(error, "pthread_create failed");
     }
+    pthread_attr_destroy(&attr);
+
     return thread;
 }
 
